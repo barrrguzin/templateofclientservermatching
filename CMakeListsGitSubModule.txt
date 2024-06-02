@@ -1,0 +1,29 @@
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
+    # Update submodules as needed
+    option(GIT_SUBMODULE "Check submodules during build" ON)
+    if(GIT_SUBMODULE)
+        message(STATUS "Submodule update")
+        execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                RESULT_VARIABLE GIT_SUBMOD_RESULT)
+        if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+            message(FATAL_ERROR "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+        endif()
+    endif()
+endif()
+
+#git submodule add --force https://github.com/google/googletest.git googletest
+add_subdirectory(
+        "${CMAKE_CURRENT_SOURCE_DIR}/googletest"
+        GTEST_LIBRARY
+)
+
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/googletest/googletest/include" GTEST_INCLUDE_DIR)
+
+set(GTEST_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/googletest")
+set(GTEST_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/googletest/googletest/include")
+set(GTEST_MAIN_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/googletest")
+
+ENABLE_TESTING()
+FIND_PACKAGE(GTest REQUIRED)
