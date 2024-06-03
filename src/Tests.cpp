@@ -61,13 +61,24 @@ TEST(Core, ProcessMultiplePartialOrders)
 TEST(Core, ListOrders)
 {
     std::string name = "test";
-    std::string target = "***\nBuy orders:\nUSD: 20; Price RUB (one USD): 5\nUSD: 50; Price RUB (one USD): 75\n---\n"
-                         "Sell orders:\nUSD: 50; Price RUB (one USD): 100\n***\n";
+    std::string target = "***\n"
+                         "Buy orders:\n"
+                         "USD: 1000; Price RUB (one USD): 10\n"
+                         "USD: 20; Price RUB (one USD): 5\n"
+                         "---\n"
+                         "Sell orders:\n"
+                         "USD: 1000; Price RUB (one USD): 60\n"
+                         "USD: 50; Price RUB (one USD): 100\n"
+                         "***\n";
     std::string id = Core::GetCore().RegisterNewUser(name);
     order order1(id, Order::Sell, 10, 10);
     order order2(id, Order::Buy, 5, 20);
+    order order3(id, Order::Sell, 60, 1000);
+    order order4(id, Order::Buy, 10, 1000);
     Core::GetCore().ProcessOrder(order1);
     Core::GetCore().ProcessOrder(order2);
+    Core::GetCore().ProcessOrder(order3);
+    Core::GetCore().ProcessOrder(order4);
     ASSERT_EQ(Core::GetCore().GetListOfOrders(id), target);
 }
 

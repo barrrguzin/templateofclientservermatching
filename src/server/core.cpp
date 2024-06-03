@@ -54,14 +54,18 @@ std::string Core::GetListOfOrders(const std::string& aUserId)
     {
         std::string result = "***\n";
         result.append("Buy orders:\n");
-        for (order order : buyOrders)
+        for (std::pair<int64_t, std::deque<order>> row : buyOrders)
         {
-            result.append("USD: " + std::to_string(order.amount_()) + "; Price RUB (one USD): " + std::to_string(order.price_()) + "\n");
+            auto q = row.second;
+            for (order order : q)
+                result.append("USD: " + std::to_string(order.amount_()) + "; Price RUB (one USD): " + std::to_string(order.price_()) + "\n");
         }
         result.append("---\nSell orders:\n");
-        for (order order : sellOrders)
+        for (std::pair<int64_t, std::deque<order>> row : sellOrders)
         {
-            result.append("USD: " + std::to_string(order.amount_()) + "; Price RUB (one USD): " + std::to_string(order.price_()) + "\n");
+            auto q = row.second;
+            for (order order : q)
+                result.append("USD: " + std::to_string(order.amount_()) + "; Price RUB (one USD): " + std::to_string(order.price_()) + "\n");
         }
         result.append("***\n");
         return result;
@@ -86,93 +90,29 @@ void Core::ProcessOrder(order order)
     }
 }
 
-
-
-void Core::ProcessSellOrder(order order)
+void Core::ProcessSellOrder(order order_)
 {
-    if (ProcessSell(order))
+    if (ProcessSell(order_))
         return;
 
-    if (sellOrders.empty())
-    {
-        sellOrders.push_back(std::move(order));
-    }
+    const auto storedOrder = sellOrders.find(order_.price_());
+    if (storedOrder == sellOrders.cend())
+        sellOrders.emplace(order_.price_(), std::deque<order>({order_}));
     else
-    {
-        size_t orderPlace = FindOrderPlace(order);
-        if (orderPlace < sellOrders.size())
-            sellOrders.insert(sellOrders.begin() + orderPlace, std::move(order));
-        else
-            sellOrders.push_back(std::move(order));
-    }
+        storedOrder->second.push_back(order_);
 }
 
 // Обработка запроса на покупку USD
-void Core::ProcessBuyOrder(order order)
+void Core::ProcessBuyOrder(order order_)
 {
-    if (ProcessBuy(order))
+    if (ProcessBuy(order_))
         return;
 
-    if (buyOrders.empty())
-    {
-        buyOrders.push_back(std::move(order));
-    }
+    const auto storedOrder = buyOrders.find(order_.price_());
+    if (storedOrder == buyOrders.cend())
+        buyOrders.emplace(order_.price_(), std::deque<order>({order_}));
     else
-    {
-        size_t orderPlace = FindOrderPlace(order);
-        if (orderPlace < buyOrders.size())
-            buyOrders.insert(buyOrders.begin() + orderPlace, std::move(order));
-        else
-            buyOrders.push_back(std::move(order));
-    }
-}
-
-size_t Core::FindOrderPlace(order& order)
-{
-    if (order.type_() == Order::Buy)
-    {
-        int left = 0;
-        int right = buyOrders.size();
-        int mid = 0;
-        while (left <= right)
-        {
-            mid = (left + right)/2;
-            if (order.price_() < buyOrders[mid].price_())
-                right = mid - 1;
-            else if (order.price_() > buyOrders[mid].price_())
-                left = mid + 1;
-            else
-                return mid;
-        }
-
-        if (order.price_() < buyOrders[mid].price_())
-            return mid;
-        else
-            return mid + 1;
-    }
-    if (order.type_() == Order::Sell)
-    {
-        int left = 0;
-        int right = sellOrders.size();
-        int mid = 0;
-        while (left <= right)
-        {
-            mid = (left + right)/2;
-            if (order.price_() < sellOrders[mid].price_())
-                left = mid + 1;
-            else if (order.price_() > sellOrders[mid].price_())
-                right = mid - 1;
-            else
-                return mid;
-        }
-
-        if (order.price_() > sellOrders[mid].price_())
-            return mid;
-        else
-            return mid + 1;
-    }
-    else
-        throw std::invalid_argument("Undifined order type");
+        storedOrder->second.push_back(order_);
 }
 
 bool Core::ProcessSell(order order_)
@@ -180,7 +120,8 @@ bool Core::ProcessSell(order order_)
     if (buyOrders.empty())
         return false;
 
-    order& matchedOrder = buyOrders.back();
+    auto firstOrder = buyOrders.begin();
+    order& matchedOrder = firstOrder->second.front();
     if (matchedOrder.price_() >= order_.price_())
     {
         const auto buyerIt = mUsers.find(matchedOrder.owner_());
@@ -199,8 +140,11 @@ bool Core::ProcessSell(order order_)
                 buyerIt->second.rub() -= matchedOrder.price_() * order_.amount_();
                 buyerIt->second.usd() += order_.amount_();
                 if (matchedOrder.amount_() == order_.amount_())
-                    buyOrders.pop_back();
-
+                {
+                    firstOrder->second.pop_front();
+                    if (firstOrder->second.empty())
+                        buyOrders.erase(firstOrder->first);
+                }
                 return true;
             }
             else
@@ -210,7 +154,9 @@ bool Core::ProcessSell(order order_)
                 sellerIt->second.usd() -= matchedOrder.amount_();
                 buyerIt->second.rub() -= matchedOrder.price_() * matchedOrder.amount_();
                 buyerIt->second.usd() += matchedOrder.amount_();
-                buyOrders.pop_back();
+                firstOrder->second.pop_front();
+                if (firstOrder->second.empty())
+                    buyOrders.erase(firstOrder->first);
                 return ProcessSell(order_);
             }
         }
@@ -226,7 +172,8 @@ bool Core::ProcessBuy(order order_)
     if (sellOrders.empty())
         return false;
 
-    order& matchedOrder = sellOrders.back();
+    auto firstOrder = sellOrders.begin();
+    order& matchedOrder = firstOrder->second.front();
     if (matchedOrder.price_() <= order_.price_())
     {
         const auto sellerIt = mUsers.find(matchedOrder.owner_());
@@ -245,8 +192,11 @@ bool Core::ProcessBuy(order order_)
                 buyerIt->second.rub() -= matchedOrder.price_() * order_.amount_();
                 buyerIt->second.usd() += order_.amount_();
                 if (matchedOrder.amount_() == order_.amount_())
-                    sellOrders.pop_back();
-
+                {
+                    firstOrder->second.pop_front();
+                    if (firstOrder->second.empty())
+                        sellOrders.erase(firstOrder->first);
+                }
                 return true;
             }
             else
@@ -256,7 +206,9 @@ bool Core::ProcessBuy(order order_)
                 sellerIt->second.usd() -= matchedOrder.amount_();
                 buyerIt->second.rub() -= matchedOrder.price_() * matchedOrder.amount_();
                 buyerIt->second.usd() += matchedOrder.amount_();
-                sellOrders.pop_back();
+                firstOrder->second.pop_front();
+                if (firstOrder->second.empty())
+                    sellOrders.erase(firstOrder->first);
                 return ProcessBuy(order_);
             }
         }

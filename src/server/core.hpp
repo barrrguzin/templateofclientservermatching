@@ -1,6 +1,7 @@
 #ifndef CORE_HPP
 #define CORE_HPP
 #include <map>
+#include <queue>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -28,18 +29,16 @@ public:
 
 private:
     std::map<size_t, user> mUsers;
-    //Отсортирован по убыванию
-    std::vector<order> sellOrders;
     //Отсортирован по возрастанию
-    std::vector<order> buyOrders;
+    std::map<int64_t, std::deque<order>> sellOrders;
+    //Отсортирован по убыванию
+    std::map<int64_t, std::deque<order>, std::greater<int64_t>> buyOrders;
 
     // Обработка запроса на продажу USD
     void ProcessSellOrder(order order);
 
     // Обработка запроса на покупку USD
     void ProcessBuyOrder(order order);
-
-    size_t FindOrderPlace(order& order);
 
     bool ProcessSell(order order_);
 
